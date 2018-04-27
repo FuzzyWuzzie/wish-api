@@ -1,6 +1,6 @@
 /target
 **/*.rs.bk
-
+*.db
 
 # Created by https://www.gitignore.io/api/osx,linux,windows
 
