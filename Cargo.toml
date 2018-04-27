@@ -1,0 +1,26 @@
+[package]
+name = "wishapi"
+version = "0.1.0"
+authors = ["Kenton Hamaluik <kenton@hamaluik.ca>"]
+
+[dependencies]
+rocket = "0.3.8"
+rocket_codegen = "0.3.8"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+jsonwebtoken = "2.0.3"
+base64 = "0.9.1"
+bcrypt = "0.2.0"
+toml = "0.4.6"
+argparse = "0.2.1"
+harsh = "0.1.4"
+
+[dependencies.rocket_contrib]
+version = "*"
+default-features = false
+features = ["json"]
+
+[dependencies.rusqlite]
+version = "0.13.0"
+features = ["bundled"]
