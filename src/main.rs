@@ -9,6 +9,8 @@ extern crate serde_derive;
 extern crate argparse;
 extern crate rusqlite;
 extern crate toml;
+extern crate base64;
+extern crate bcrypt;
 
 use argparse::{ArgumentParser, Store, StoreTrue};
 
@@ -18,6 +20,7 @@ mod database;
 mod messages;
 mod routes;
 mod tokens;
+mod errors;
 
 fn main() {
     let mut create_admin_user = false;
@@ -56,7 +59,7 @@ fn main() {
     if create_admin_user {
         println!("Creating user...");
         let conn = db.lock()
-            .expect("Couldn't lock database!");
+            .expect("Database lock");
         auth::register_user(&conn, &name, &pass, &true)
             .expect("Failed to create admin user!");
         println!(

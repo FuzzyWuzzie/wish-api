@@ -1,17 +1,15 @@
-extern crate base64;
-extern crate bcrypt;
-extern crate rocket;
-
-use self::bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use rocket::http::Status;
 use rocket::request::{self, FromRequest, Request};
 use rocket::Outcome;
 use rocket::State;
+use std::sync::Mutex;
 use rusqlite::Connection;
+use base64;
 
 use config::Config;
-use database::MutexConnection;
 use tokens;
+use errors::Error;
 
 #[derive(Debug)]
 pub struct AuthBasicSuccess {
@@ -60,7 +58,7 @@ impl<'a, 'r> FromRequest<'a, 'r> for IsAdmin {
     fn from_request(request: &'a Request<'r>) -> request::Outcome<IsAdmin, ()> {
         let token = request.guard::<AuthToken>()?;
         if !token.adm {
-            return Outcome::Failure((Status::BadRequest, ()));
+            return Outcome::Failure((Status::Unauthorized, ()));
         }
 
         Outcome::Success(IsAdmin())
@@ -73,7 +71,7 @@ impl<'a, 'r> FromRequest<'a, 'r> for AuthBasicSuccess {
     fn from_request(request: &'a Request<'r>) -> request::Outcome<AuthBasicSuccess, ()> {
         let auths: Vec<_> = request.headers().get("Authorization").collect();
         if auths.len() != 1 {
-            return Outcome::Failure((Status::BadRequest, ()));
+            return Outcome::Failure((Status::Unauthorized, ()));
         }
 
         let auth: Vec<&str> = auths[0].split(' ').collect();
@@ -82,8 +80,14 @@ impl<'a, 'r> FromRequest<'a, 'r> for AuthBasicSuccess {
         }
 
         let auth = auth[1];
-        let auth = base64::decode(&auth).unwrap();
-        let auth: String = String::from_utf8(auth).unwrap();
+        let auth = match base64::decode(&auth) {
+            Ok(a) => a,
+            Err(_) => return Outcome::Failure((Status::Unauthorized, ())) 
+        };
+        let auth: String = match String::from_utf8(auth) {
+            Ok(a) => a,
+            Err(_) => return Outcome::Failure((Status::Unauthorized, ())) 
+        };
 
         let auth: Vec<&str> = auth.split(':').collect();
         if auth.len() < 2 {
@@ -92,48 +96,38 @@ impl<'a, 'r> FromRequest<'a, 'r> for AuthBasicSuccess {
         let user: &str = auth[0];
         let pass: &str = &auth[1..].join(":");
 
-        let conn = request.guard::<State<MutexConnection>>()?;
-        let conn = conn.lock().expect("db connection lock");
+        let conn = request.guard::<State<Mutex<Connection>>>()?;
+        let conn = conn.lock()
+            .expect("Database lock");
         // TODO: check email or google or facebook instead of name
         let mut stmt = conn.prepare("select id, pass, admin from users where name=?1")
-            .unwrap();
+            .expect("prepare select");
         let (uid, hash, adm): (u32, String, bool) = match stmt.query_row(&[&user], |row| {
             let admin: i32 = row.get(2);
             (row.get(0), row.get(1), admin == 1)
         }) {
-            Ok(derp) => derp,
+            Ok(data) => data,
             Err(_) => return Outcome::Failure((Status::Unauthorized, ())),
         };
 
-        if verify(pass, &hash).is_err() {
-            return Outcome::Failure((Status::Unauthorized, ()));
+        match verify(pass, &hash) {
+            Ok(_) => Outcome::Success(AuthBasicSuccess { uid, adm }),
+            Err(_) => Outcome::Failure((Status::Unauthorized, ()))
         }
-
-        return Outcome::Success(AuthBasicSuccess { uid, adm });
     }
 }
 
-pub fn register_user(conn: &Connection, name: &str, pass: &str, admin: &bool) -> Result<u32, ()> {
-    let hashed_pass = match hash(pass, DEFAULT_COST) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
+pub fn register_user(conn: &Connection, name: &str, pass: &str, admin: &bool) -> Result<u32, Error> {
+    let hashed_pass = hash(pass, DEFAULT_COST)?;
 
     let adm: i32 = if *admin { 1 } else { 0 };
-    let result = conn.execute(
+    conn.execute(
         "insert into users(name, pass, admin) values(?1, ?2, ?3)",
         &[&name, &hashed_pass, &adm],
-    );
-    if result.is_err() {
-        return Err(());
-    }
+    )?;
 
-    let mut stmt = conn.prepare("select id from users order by id desc limit 1")
-        .unwrap();
-    let id:u32 = match stmt.query_row(&[], |row| row.get(0)) {
-        Ok(id) => id,
-        Err(_) => return Err(()),
-    };
+    let mut stmt = conn.prepare("select id from users order by id desc limit 1")?;
+    let id:u32 = stmt.query_row(&[], |row| row.get(0))?;
 
     Ok(id)
 }
