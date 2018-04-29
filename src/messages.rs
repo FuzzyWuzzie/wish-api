@@ -9,3 +9,8 @@ pub struct CreateUserCredentials {
 pub struct UserID {
     pub uid:u32
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Token {
+    pub token:String
+}

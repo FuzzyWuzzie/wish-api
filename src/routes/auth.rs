@@ -1,5 +1,5 @@
 use rocket::State;
-use rocket_contrib::{Json, Value};
+use rocket_contrib::Json;
 
 use ::auth::{AuthBasicSuccess, AuthToken, IsAdmin};
 use ::config::Config;
@@ -8,10 +8,10 @@ use ::messages;
 use ::database::MutexConnection;
 
 #[get("/")]
-fn sign_in(config: State<Config>, auth: AuthBasicSuccess) -> Json<Value> {
-    Json(json!({
-        "token": tokens::build_token(&config.secret, auth.uid, auth.adm)
-    }))
+fn sign_in(config: State<Config>, auth: AuthBasicSuccess) -> Json<messages::Token> {
+    Json(messages::Token {
+        token: tokens::build_token(&config.secret, auth.uid, auth.adm)
+    })
 }
 
 #[post("/", data="<credentials>")]
@@ -22,6 +22,13 @@ fn create_user(conn: State<MutexConnection>, credentials: Json<messages::CreateU
         .unwrap(); // TODO: error handling
     Json(messages::UserID {
         uid
+    })
+}
+
+#[get("/refresh")]
+fn refresh_token(config: State<Config>, auth: AuthToken) -> Json<messages::Token> {
+    Json(messages::Token {
+        token: tokens::build_token(&config.secret, auth.uid, auth.adm)
     })
 }
 

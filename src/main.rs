@@ -2,7 +2,6 @@
 #![plugin(rocket_codegen)]
 
 extern crate rocket;
-#[macro_use]
 extern crate rocket_contrib;
 #[macro_use]
 extern crate serde_derive;
@@ -69,7 +68,7 @@ fn main() {
         rocket::ignite()
             .manage(config)
             .manage(db)
-            .mount("/auth", routes![routes::auth::sign_in, routes::auth::create_user])
+            .mount("/auth", routes![routes::auth::sign_in, routes::auth::create_user, routes::auth::refresh_token])
             .launch();
     }
 }
